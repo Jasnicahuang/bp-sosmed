@@ -41,6 +41,7 @@ metadata:
     app: sosmed-deployment
 spec:
   replicas: 3
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: sosmed-deployment
@@ -49,6 +50,7 @@ spec:
       labels:
         app: sosmed-deployment
     spec:
+    terminationGracePeriodSeconds: 30
       volumes:
         - name: config-secret
           configMap:
