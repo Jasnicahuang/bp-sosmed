@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: production
+  name: p-secret-fb
+type: Opaque
+data:
+  DB_USER: ZGV2b3BzY2lsc3k=
+  DB_PASS: MTIzNDU2Nzg5MA==
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: production
+  name: p-fb-configmap-secret
+data:
+  config.php: |
+    <?php
+    $db_host = "dbcilsy.cxojuezb7cuy.ap-southeast-1.rds.amazonaws.com";
+    $db_user = getenv("DB_USER");
+    $db_pass = getenv("DB_PASS");
+    $db_name = "pesbukprod";
+    try {    
+      //create PDO connection
+      $db = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
+    } catch(PDOException $e) {
+      //show error
+      die("Terjadi masalah: " . $e->getMessage());
+    }
+    ?>
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: production
+  name: sosmed-deployment
+  labels:
+    app: sosmed-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sosmed-deployment
+  template:
+    metadata:
+      labels:
+        app: sosmed-deployment
+    spec:
+      volumes:
+        - name: config-secret
+          configMap:
+            name: p-fb-configmap-secret
+      containers:
+      - name: sosmed-deployment
+        image: jasnicahuang/sosmed:latest
+        imagePullPolicy: "Always"
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: config-secret
+          mountPath: "/var/www/html/config.php"
+          subPath: "config.php"
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: p-secret-fb
+              key: DB_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: p-secret-fb
+              key: DB_PASS
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  namespace: production
+  name: sosmed-service
+spec:
+  selector:
+    app: sosmed-deployment
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+
+---
+
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  namespace: production
+  name: ingress
+  annotations:
+     kubernetes.io/ingress.class: "nginx"
+     nginx.ingress.kubernetes.io/affinity: "cookie"
+     nginx.ingress.kubernetes.io/session-cookie-name: "goodbye-cookie"
+     nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+     nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+     nginx.ingress.kubernetes.io/affinity-mode: persistent
+     nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+spec:
+  rules:
+  - host: pesbuk.jasnicahuang.xyz
+    http:
+      paths:
+        - backend:
+           serviceName: sosmed-service
+           servicePort: 80
